@@ -52,6 +52,7 @@
   #strips .connecting .dot { background: var(--warn); }
   #strips .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #strips button { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+  #strips .err-line { color: #ff8a8a; font-size: 12px; white-space: normal; }
   .empty { color: var(--muted); font-size: 15px; margin: 0 0 12px; }
 
   .power { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -276,6 +277,19 @@ class Strip {
     });
   }
 
+  // A remembered device (from getDevices) often can't be connected until the browser
+  // has heard it advertise since the page loaded, so listen for it first.
+  async waitForAdvert(ms = 8000) {
+    const d = this.device;
+    if (!d.watchAdvertisements) return;
+    await new Promise(async resolve => {
+      const done = () => { clearTimeout(t); d.removeEventListener("advertisementreceived", done); resolve(); };
+      const t = setTimeout(done, ms);
+      d.addEventListener("advertisementreceived", done);
+      try { if (!d.watchingAdvertisements) await d.watchAdvertisements(); } catch (e) { this.lastError = "watch: " + e.message; done(); }
+    });
+  }
+
   // Retry quietly with growing gaps; stops once connected. Safe to call repeatedly.
   async reconnect(tries = 6) {
     if (this.retrying || this.state === "on") return;
@@ -283,14 +297,20 @@ class Strip {
     try {
       for (let i = 0; i < tries && this.state !== "on"; i++) {
         try {
-          await Promise.race([this.connect(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000))]);
-        } catch {
+          this.setState("connecting");
+          await this.waitForAdvert();
+          await Promise.race([this.connect(), new Promise((_, rej) => setTimeout(() => rej(new Error("timed out")), 10000))]);
+          this.lastError = null;
+        } catch (e) {
+          this.lastError = e.message || String(e);
+          try { this.device.gatt.disconnect(); } catch {}
           this.setState("off");
           await new Promise(r => setTimeout(r, 2000 * (i + 1)));
         }
       }
     } finally {
       this.retrying = false;
+      render();
     }
   }
 
@@ -386,6 +406,12 @@ function render() {
     const label = { on: "Connected", off: "Disconnected", connecting: "Connecting…" }[s.state];
     li.innerHTML = `<span class="dot"></span><span class="name"></span>`;
     li.querySelector(".name").textContent = `${s.device.name || "Strip " + (i + 1)} · ${label}`;
+    if (s.state === "off" && s.lastError) {
+      const err = document.createElement("div");
+      err.className = "err-line";
+      err.textContent = s.lastError;
+      li.querySelector(".name").appendChild(err);
+    }
     if (s.state === "off") {
       const b = document.createElement("button");
       b.textContent = "Reconnect";
