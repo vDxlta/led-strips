@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111214">
+<title>Strip Control</title>
+<style>
+  :root {
+    --bg: #111214;
+    --panel: #1b1d21;
+    --panel-2: #24272c;
+    --text: #f1f2f4;
+    --muted: #9aa0a8;
+    --line: #2e3238;
+    --accent: #ff3b3b;
+    --ok: #3ddc84;
+    --warn: #ffb020;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    max-width: 520px; margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin: 4px 0 16px; display: flex; align-items: center; gap: 10px; }
+  .glow {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 14px var(--accent);
+    transition: background .2s, box-shadow .2s;
+  }
+  section { background: var(--panel); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+  .label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 12px; }
+  button {
+    font: inherit; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; cursor: pointer;
+  }
+  button:active { transform: scale(.98); }
+  button:disabled { opacity: .4; }
+  .row { display: flex; gap: 10px; align-items: center; }
+  .grow { flex: 1; }
+
+  #strips { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+  #strips li {
+    display: flex; align-items: center; gap: 10px; background: var(--panel-2);
+    border-radius: 12px; padding: 10px 12px; font-size: 15px;
+  }
+  #strips .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  #strips .on .dot { background: var(--ok); }
+  #strips .connecting .dot { background: var(--warn); }
+  #strips .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #strips button { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+  .empty { color: var(--muted); font-size: 15px; margin: 0 0 12px; }
+
+  .power { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .power button { padding: 18px; font-size: 18px; font-weight: 600; }
+  #btnOn { background: #f1f2f4; color: #111; border-color: #f1f2f4; }
+
+  .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 14px; }
+  .swatch {
+    aspect-ratio: 1; border-radius: 50%; border: 2px solid transparent; padding: 0;
+    background: var(--c);
+  }
+  .swatch.sel { border-color: var(--text); box-shadow: 0 0 0 3px var(--bg) inset; }
+  .custom {
+    display: flex; align-items: center; gap: 12px; background: var(--panel-2);
+    border-radius: 12px; padding: 8px 12px;
+  }
+  input[type=color] {
+    -webkit-appearance: none; appearance: none; width: 44px; height: 44px;
+    border: none; border-radius: 50%; padding: 0; background: none; cursor: pointer;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
+  #hex { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--muted); }
+
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 32px; }
+  #brightVal, .val { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 44px; text-align: right; }
+
+  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+  .presets button { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .presets .bar { height: 26px; }
+  .presets .name { padding: 7px 4px; font-size: 14px; }
+  .zone-custom { gap: 8px; }
+  .zone-custom input[type=color] { width: 38px; height: 38px; flex: none; }
+  .zone-custom button { padding: 10px 8px; font-size: 14px; }
+  #btnMusic.active, #btnSyncScreen.active, #btnSyncCam.active { border-color: var(--accent); color: var(--accent); }
+  #syncVideo { width: 100%; border-radius: 12px; margin-bottom: 12px; background: #000; }
+  #syncVideo[hidden] { display: none; }
+  .row[hidden] { display: none; }
+  .hint { color: var(--muted); font-size: 13px; margin: 10px 2px 0; }
+  .hint:empty { display: none; }
+  select {
+    font: inherit; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+  }
+
+  .effects { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .effects button.active { border-color: var(--accent); color: var(--accent); }
+
+  button.link {
+    background: none; border: none; color: var(--muted); font-size: 13px;
+    padding: 10px 2px 0; text-decoration: underline; width: 100%;
+  }
+  #msg { color: var(--muted); font-size: 14px; margin: 10px 2px 0; }
+  #msg:empty { display: none; }
+  #msg.err { color: #ff6b6b; }
+</style>
+</head>
+<body>
+  <h1><span class="glow" id="glow"></span>Strip Control</h1>
+
+  <section>
+    <p class="label">Strips</p>
+    <ul id="strips"></ul>
+    <p class="empty" id="empty">No strips connected yet. Add each one, one at a time.</p>
+    <button id="btnAdd" class="grow" style="width:100%">+ Add strip</button>
+    <button id="btnAddAll" class="link">Strip not in the list? Show all Bluetooth devices</button>
+    <p id="msg"></p>
+  </section>
+
+  <section>
+    <p class="label">Power</p>
+    <div class="power">
+      <button id="btnOn">On</button>
+      <button id="btnOff">Off</button>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Color</p>
+    <div class="swatches" id="swatches"></div>
+    <label class="custom">
+      <input type="color" id="picker" value="#ff0000">
+      <span class="grow">Custom color</span>
+      <span id="hex">#FF0000</span>
+    </label>
+  </section>
+
+  <section>
+    <p class="label">Zones</p>
+    <div class="presets" id="presets"></div>
+    <div class="custom zone-custom">
+      <input type="color" id="z1" value="#ff0080" aria-label="Zone color 1">
+      <input type="color" id="z2" value="#00c0ff" aria-label="Zone color 2">
+      <input type="color" id="z3" value="#ffd000" aria-label="Zone color 3">
+      <button id="btnBlend" class="grow">Blend</button>
+      <button id="btnBlocks" class="grow">Blocks</button>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Brightness</p>
+    <div class="row">
+      <input type="range" id="bright" min="1" max="100" value="100" class="grow">
+      <span id="brightVal">100%</span>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Effects</p>
+    <div class="effects">
+      <button data-effect="rainbow">Rainbow</button>
+      <button data-effect="breathe">Breathe</button>
+      <button data-effect="party">Party</button>
+      <button data-effect="candle">Candle</button>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Sync to video</p>
+    <div class="effects" style="margin-bottom:12px">
+      <button id="btnSyncScreen">Screen</button>
+      <button id="btnSyncCam">Capture card / camera</button>
+    </div>
+    <div class="row" id="camRow" hidden style="margin-bottom:12px">
+      <span class="grow">Video input</span>
+      <select id="camSelect"></select>
+    </div>
+    <video id="syncVideo" muted playsinline hidden></video>
+    <div class="row" style="margin-bottom:12px">
+      <span class="grow">Layout</span>
+      <select id="syncLayout">
+        <option value="across">Both strips: left → right</option>
+        <option value="edges">Strip 1 left edge, strip 2 right edge</option>
+        <option value="single">One color per strip</option>
+      </select>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <span>Smooth</span>
+      <input type="range" id="syncSmooth" min="0" max="90" value="50" class="grow">
+      <label class="row" style="gap:6px"><input type="checkbox" id="syncReverse"> Flip</label>
+    </div>
+    <button id="btnSyncStop" style="width:100%" hidden>Stop sync</button>
+    <p id="syncInfo" class="hint"></p>
+    <p id="syncMsg" class="hint"></p>
+  </section>
+
+  <section>
+    <p class="label">Music (strip's own mic)</p>
+    <div class="row" style="margin-bottom:12px">
+      <span class="grow">Effect</span>
+      <select id="musicEffect"></select>
+    </div>
+    <div class="row" style="margin-bottom:14px">
+      <span>Mic</span>
+      <input type="range" id="micSens" min="0" max="100" value="80" class="grow">
+      <span id="micVal" class="val">80</span>
+    </div>
+    <button id="btnMusic" style="width:100%">Start music mode</button>
+  </section>
+
+<script>
+/* Vont strip protocol (decoded from the Vont Home app's BleLib):
+ *   frame: AA 55 | len(2) | serial(2) | flag | cmd | payload | checksum
+ *   flag 0x80 = request, 0x40 = ack; checksum = (sum of prior bytes) ^ 0x33
+ *   cmd 0x82 = read attributes, 0x83 = write attributes
+ *   attribute: id(2) | type(1) | [len(2) for types 0/8] | value, big-endian
+ */
+const SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
+const AD_SERVICE_UUID = "0000e0ff-0000-1000-8000-00805f9b34fb";
+const CHAR_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
+const BRIGHT_MAX = 100;
+const T = { BOOL: 9, BYTE: 1, INT: 5 };
+const TYPE_LEN = { 0: null, 1: 1, 2: 2, 3: 4, 4: 2, 5: 4, 6: 4, 7: 1, 8: null, 9: 1 };
+const A = {
+  POWER: 1, MODE: 2, MIC_SENS: 3, COLOR: 6, BRIGHT: 7, AUTO_COLOR: 8, MUSIC_ON: 9,
+  PICKUP: 13, ZONES: 15, DIRECTION: 16, MUSIC_EFFECT: 17, MUSIC_COLORS: 19, MUSIC_GRADIENT: 21,
+};
+T.BYTES = 8;
+const MODE_MUSIC = 1, MODE_COLOR = 2;
+const ZONES = 15;
+const MUSIC_COLORS = ["#ff0000", "#ffa500", "#ffff00", "#00ff00", "#0000ff", "#00ffff", "#a020f0"];
+
+const sum33 = bytes => (bytes.reduce((s, b) => s + b, 0) ^ 0x33) & 0xff;
+
+function frame(cmd, payload, serial, flag = 0x80) {
+  const n = payload.length + 9;
+  const out = [0xaa, 0x55, n >> 8, n & 0xff, (serial >> 8) & 0xff, serial & 0xff, flag, cmd, ...payload];
+  out.push(sum33(out));
+  return new Uint8Array(out);
+}
+
+const attr = (id, type, value) => [id >> 8, id & 0xff, type, ...value];
+
+function parseAttrs(p) {
+  const out = {};
+  let i = 0;
+  while (i + 3 <= p.length) {
+    const id = (p[i] << 8) | p[i + 1], type = p[i + 2];
+    i += 3;
+    let n = TYPE_LEN[type];
+    if (n == null) { n = (p[i] << 8) | p[i + 1]; i += 2; }
+    out[id] = p.slice(i, i + n);
+    i += n;
+  }
+  return out;
+}
+
+class Strip {
+  constructor(device) {
+    this.device = device;
+    this.char = null;
+    this.serial = 0xffff;
+    this.buf = [];
+    this.pending = new Map();   // latest value per attribute; older ones are dropped
+    this.busy = false;
+    this.state = "connecting";
+    device.addEventListener("gattserverdisconnected", () => { this.char = null; this.setState("off"); });
+  }
+
+  setState(s) { this.state = s; render(); }
+
+  async connect() {
+    this.setState("connecting");
+    const server = await this.device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE_UUID);
+    this.char = await svc.getCharacteristic(CHAR_UUID);
+    this.char.addEventListener("characteristicvaluechanged", e => this.onData(new Uint8Array(e.target.value.buffer)));
+    await this.char.startNotifications();
+    this.setState("on");
+    this.write(frame(0x82, [], this.nextSerial()));  // ask for current state
+  }
+
+  nextSerial() { const s = this.serial; this.serial = (this.serial - 1) || 0xffff; return s; }
+
+  async write(bytes) {
+    if (!this.char) return;
+    if (this.char.writeValueWithResponse) await this.char.writeValueWithResponse(bytes);
+    else await this.char.writeValue(bytes);
+  }
+
+  onData(chunk) {
+    this.buf.push(...chunk);
+    for (;;) {
+      let start = -1;
+      for (let i = 0; i + 1 < this.buf.length; i++) if (this.buf[i] === 0xaa && this.buf[i + 1] === 0x55) { start = i; break; }
+      if (start < 0 || this.buf.length < start + 4) return;
+      const n = (this.buf[start + 2] << 8) | this.buf[start + 3];
+      if (n < 9) { this.buf.splice(0, start + 2); continue; }
+      if (this.buf.length < start + n) return;
+      const pkt = this.buf.splice(0, start + n).slice(start);
+      if (sum33(pkt.slice(0, -1)) !== pkt[pkt.length - 1]) continue;
+      const flag = pkt[6], cmd = pkt[7];
+      if (flag === 0x80 && cmd !== 0xe0 && cmd !== 0xe1) {
+        const ack = pkt.slice(0, 8); ack[2] = 0; ack[3] = 9; ack[6] = 0x40; ack.push(sum33(ack));
+        this.write(new Uint8Array(ack)).catch(() => {});
+      }
+      if (cmd >= 0x81 && cmd <= 0x83) onStripState(parseAttrs(pkt.slice(8, -1)));
+    }
+  }
+
+  // Each attribute goes in its own small packet so it fits a 20-byte BLE write.
+  set(id, type, value) {
+    this.queue(id, attr(id, type, value));
+  }
+
+  // key dedupes: a newer value for the same key replaces one still waiting to go out.
+  // gap (ms) waits after sending; the strip needs a moment between multi-step changes.
+  queue(key, payload, gap = 0) {
+    this.pending.delete(key);
+    this.pending.set(key, { payload, gap });
+    this.pump();
+  }
+
+  async pump() {
+    if (this.busy || !this.char) return;
+    this.busy = true;
+    try {
+      while (this.pending.size && this.char) {
+        const [key, { payload, gap }] = this.pending.entries().next().value;
+        this.pending.delete(key);
+        await this.write(frame(0x83, payload, this.nextSerial()));
+        if (gap) await new Promise(r => setTimeout(r, gap));
+      }
+    } catch (e) {
+      say("Send failed: " + e.message, true);
+    } finally {
+      this.busy = false;
+    }
+  }
+}
+
+/* ---------- app state + UI ---------- */
+const strips = [];
+const $ = id => document.getElementById(id);
+const SWATCHES = ["#ff0000", "#ff6000", "#ffd000", "#00ff00", "#00ffff",
+                  "#0000ff", "#8000ff", "#ff2080", "#ffffff", "#ff9b3c"];
+let current = "#ff0000";
+let synced = false;
+
+function say(text, err = false) { const m = $("msg"); m.textContent = text; m.className = err ? "err" : ""; }
+
+function render() {
+  const ul = $("strips");
+  ul.innerHTML = "";
+  strips.forEach((s, i) => {
+    const li = document.createElement("li");
+    li.className = s.state;
+    const label = { on: "Connected", off: "Disconnected", connecting: "Connecting…" }[s.state];
+    li.innerHTML = `<span class="dot"></span><span class="name"></span>`;
+    li.querySelector(".name").textContent = `${s.device.name || "Strip " + (i + 1)} · ${label}`;
+    if (s.state === "off") {
+      const b = document.createElement("button");
+      b.textContent = "Reconnect";
+      b.onclick = () => s.connect().catch(e => { s.setState("off"); say(e.message, true); });
+      li.appendChild(b);
+    }
+    ul.appendChild(li);
+  });
+  $("empty").hidden = strips.length > 0;
+}
+
+function showColor(hex) {
+  current = hex;
+  $("picker").value = hex;
+  $("hex").textContent = hex.toUpperCase();
+  $("glow").style.background = hex;
+  $("glow").style.boxShadow = `0 0 14px ${hex}`;
+  document.documentElement.style.setProperty("--accent", hex === "#000000" ? "#ff3b3b" : hex);
+  document.querySelectorAll(".swatch").forEach(s => s.classList.toggle("sel", s.dataset.c === hex));
+}
+
+const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const rgbToHex = (r, g, b) => "#" + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+
+function hsv(h, s = 1, v = 1) {
+  const f = n => { const k = (n + h * 6) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return [f(5) * 255, f(3) * 255, f(1) * 255];
+}
+
+function all(fn) { strips.filter(s => s.state === "on").forEach(fn); }
+
+function sendColor(rgb, { power = false } = {}) {
+  all(s => {
+    if (power) s.set(A.POWER, T.BOOL, [1]);
+    s.set(A.MODE, T.BYTE, [MODE_COLOR]);
+    s.set(A.COLOR, T.INT, [0, ...rgb.map(Math.round)]);
+  });
+}
+
+function pickColor(hex) {
+  stopEffect();
+  stopMusicUi();
+  showColor(hex);
+  sendColor(hexToRgb(hex), { power: true });
+}
+
+/* ---------- zones: 15 colors along each strip ---------- */
+const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+
+// Blend smoothly through the stops (gradient) or give each stop an equal block.
+function zoneColors(stops, blend) {
+  const rgb = stops.map(hexToRgb);
+  return Array.from({ length: ZONES }, (_, z) => {
+    if (rgb.length === 1) return rgb[0];
+    if (!blend) return rgb[Math.floor(z * rgb.length / ZONES)];
+    const pos = z / (ZONES - 1) * (rgb.length - 1);
+    const i = Math.min(Math.floor(pos), rgb.length - 2);
+    return lerp(rgb[i], rgb[i + 1], pos - i);
+  });
+}
+
+function sendZones(colors) {
+  stopEffect();
+  stopMusicUi();
+  const bytes = colors.flatMap(c => [0, ...c.map(v => Math.round(v))]);
+  all(s => {
+    s.set(A.POWER, T.BOOL, [1]);
+    s.set(A.MODE, T.BYTE, [MODE_COLOR]);
+    s.queue("zones", attr(A.ZONES, T.BYTES, [0, bytes.length, ...bytes]));
+  });
+  $("glow").style.background = `linear-gradient(90deg, ${colors.map(c => rgbToHex(...c)).join(",")})`;
+}
+
+const ZONE_PRESETS = {
+  Rainbow: { stops: ["#ff0000", "#ff8000", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#8000ff", "#ff00a0"], blend: true },
+  Sunset:  { stops: ["#ff2000", "#ff6000", "#ff00a0", "#6000ff"], blend: true },
+  Ocean:   { stops: ["#00ffd0", "#0080ff", "#0000ff", "#00ffd0"], blend: true },
+  Forest:  { stops: ["#00ff20", "#80ff00", "#00a040", "#ffd000"], blend: true },
+  Candy:   { stops: ["#ff2080", "#ffffff", "#00ffff"], blend: false },
+  "USA":   { stops: ["#ff0000", "#ffffff", "#0000ff"], blend: false },
+};
+
+/* ---------- built-in music mode (strip's own microphone) ---------- */
+let musicOn = false;
+
+function stopMusicUi() { if (syncStream) stopSync(); musicOn = false; $("btnMusic").classList.remove("active"); $("btnMusic").textContent = "Start music mode"; }
+
+function sendMusic() {
+  stopEffect();
+  if (syncStream) stopSync();
+  musicOn = true;
+  $("btnMusic").classList.add("active");
+  $("btnMusic").textContent = "Music mode on";
+  const effect = +$("musicEffect").value, sens = +$("micSens").value;
+  const colors = MUSIC_COLORS.flatMap(h => [0xff, ...hexToRgb(h)]);
+  // The strip ignores these if they arrive in one packet; the app sends them in three.
+  all(s => {
+    s.queue("music1", [...attr(A.POWER, T.BOOL, [1]), ...attr(A.MODE, T.BYTE, [MODE_MUSIC])], 250);
+    s.queue("music2", attr(A.PICKUP, T.BYTE, [0]), 250);
+    s.queue("music3", [
+      ...attr(A.MIC_SENS, T.BYTE, [sens]),
+      ...attr(A.MUSIC_ON, T.BYTE, [1]),
+      ...attr(A.AUTO_COLOR, T.BYTE, [0]),
+      ...attr(A.DIRECTION, T.BYTE, [1]),
+      ...attr(A.MUSIC_GRADIENT, T.BYTE, [0]),
+      ...attr(A.MUSIC_COLORS, T.BYTES, [0, colors.length, ...colors]),
+      ...attr(A.MUSIC_EFFECT, T.BYTE, [effect]),
+    ]);
+  });
+  $("glow").style.background = "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)";
+}
+
+// The first strip to report its state sets the UI (it was blue at brightness 20, etc.).
+function onStripState(a) {
+  if (synced) return;
+  synced = true;
+  if (a[A.COLOR]) { const c = a[A.COLOR]; showColor(rgbToHex(c[1], c[2], c[3])); }
+  if (a[A.BRIGHT]) { const b = Math.min(a[A.BRIGHT][0], BRIGHT_MAX); $("bright").value = b; $("brightVal").textContent = b + "%"; }
+}
+
+/* ---------- effects (run here in the page, so the page must stay open) ---------- */
+let effectTimer = null, effectName = null;
+
+function stopEffect() {
+  clearInterval(effectTimer);
+  effectTimer = effectName = null;
+  document.querySelectorAll("[data-effect]").forEach(b => b.classList.remove("active"));
+}
+
+const EFFECTS = {
+  rainbow: { ms: 120, step: t => hsv((t * 0.006) % 1) },
+  breathe: { ms: 90, step: t => { const k = 0.08 + 0.92 * (0.5 - 0.5 * Math.cos(t * 0.06)); return hexToRgb(current).map(v => v * k); } },
+  party:   { ms: 450, step: () => hsv(Math.random()) },
+  candle:  { ms: 110, step: () => { const k = 0.55 + Math.random() * 0.45; return [255 * k, 110 * k, 20 * k]; } },
+};
+
+function startEffect(name) {
+  const wasSame = effectName === name;
+  stopEffect();
+  stopMusicUi();
+  if (wasSame) return;
+  const eff = EFFECTS[name];
+  effectName = name;
+  document.querySelector(`[data-effect="${name}"]`).classList.add("active");
+  all(s => { s.set(A.POWER, T.BOOL, [1]); s.set(A.MODE, T.BYTE, [MODE_COLOR]); });
+  let t = 0;
+  effectTimer = setInterval(() => {
+    const rgb = eff.step(t++);
+    all(s => s.set(A.COLOR, T.INT, [0, ...rgb.map(v => Math.max(0, Math.min(255, Math.round(v))))]));
+    $("glow").style.background = rgbToHex(...rgb);
+  }, eff.ms);
+}
+
+/* ---------- sync to video: screen share, capture card or camera ---------- */
+const SYNC_W = 96, SYNC_H = 54, SYNC_MS = 66;          // sample a tiny frame ~15x a second
+const syncCanvas = Object.assign(document.createElement("canvas"), { width: SYNC_W, height: SYNC_H });
+const syncCtx = syncCanvas.getContext("2d", { willReadFrequently: true });
+// A worker keeps ticking while this tab is in the background; page timers get throttled.
+const ticker = new Worker(URL.createObjectURL(new Blob(
+  ["let t; onmessage = e => { clearInterval(t); if (e.data) t = setInterval(() => postMessage(0), e.data); };"],
+  { type: "text/javascript" })));
+let syncStream = null, syncSmoothed = [], syncSent = [];
+
+// Average color where colorful, bright pixels count more than gray or dark ones.
+function vividMean(d, x0, x1, y0, y1) {
+  let r = 0, g = 0, b = 0, wsum = 0;
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const i = (y * SYNC_W + x) * 4, R = d[i], G = d[i + 1], B = d[i + 2];
+    const mx = Math.max(R, G, B), mn = Math.min(R, G, B);
+    const w = (mx - mn) * 4 + mx * 0.5 + 5;
+    r += R * w; g += G * w; b += B * w; wsum += w;
+  }
+  return [r / wsum, g / wsum, b / wsum];
+}
+
+function boostSat([r, g, b], k = 1.4) {
+  const m = (r + g + b) / 3;
+  return [r, g, b].map(v => Math.max(0, Math.min(255, m + (v - m) * k)));
+}
+
+function syncZones(d, layout, which) {
+  const z = [...Array(ZONES).keys()];
+  if (layout === "single") { const c = vividMean(d, 0, SYNC_W, 0, SYNC_H); return z.map(() => c); }
+  if (layout === "edges") {
+    const x0 = which % 2 === 0 ? 0 : SYNC_W - SYNC_W / 4, x1 = x0 + SYNC_W / 4;
+    return z.map(i => vividMean(d, x0, x1, Math.floor(SYNC_H * i / ZONES), Math.floor(SYNC_H * (i + 1) / ZONES)));
+  }
+  return z.map(i => vividMean(d, Math.floor(SYNC_W * i / ZONES), Math.floor(SYNC_W * (i + 1) / ZONES), 0, SYNC_H));
+}
+
+function syncTick() {
+  const v = $("syncVideo");
+  if (!syncStream || v.readyState < 2) return;
+  syncCtx.drawImage(v, 0, 0, SYNC_W, SYNC_H);
+  const d = syncCtx.getImageData(0, 0, SYNC_W, SYNC_H).data;
+  const layout = $("syncLayout").value, smooth = +$("syncSmooth").value / 100, flip = $("syncReverse").checked;
+  strips.forEach((s, i) => {
+    if (s.state !== "on") return;
+    let target = syncZones(d, layout, i).map(c => boostSat(c));
+    if (flip) target.reverse();
+    const prev = syncSmoothed[i];
+    syncSmoothed[i] = prev ? prev.map((p, z) => p.map((v, k) => v + (target[z][k] - v) * (1 - smooth))) : target;
+    // gamma: darker darks, punchier colors
+    const out = syncSmoothed[i].map(c => c.map(v => Math.round(255 * Math.pow(v / 255, 1.4))));
+    const last = syncSent[i];
+    if (last && out.every((c, z) => c.every((v, k) => Math.abs(v - last[z][k]) < 3))) return;
+    syncSent[i] = out;
+    const bytes = out.flatMap(c => [0, ...c]);
+    s.queue("zones", attr(A.ZONES, T.BYTES, [0, bytes.length, ...bytes]));   // replaces any frame still waiting
+    if (i === 0) $("glow").style.background = `linear-gradient(90deg, ${out.map(c => rgbToHex(...c)).join(",")})`;
+  });
+}
+ticker.onmessage = syncTick;
+
+async function listCameras() {
+  const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+  const sel = $("camSelect"), keep = sel.value;
+  sel.innerHTML = "";
+  cams.forEach((c, i) => sel.add(new Option(c.label || `Camera ${i + 1}`, c.deviceId)));
+  if (cams.some(c => c.deviceId === keep)) sel.value = keep;
+  $("camRow").hidden = cams.length === 0;
+}
+
+function syncSay(text) { $("syncMsg").textContent = text; $("syncMsg").style.color = "#ff6b6b"; }
+
+async function startSync(kind) {
+  stopSync();
+  stopEffect();
+  stopMusicUi();
+  syncSay("");
+  const md = navigator.mediaDevices;
+  if (kind === "screen" ? !md?.getDisplayMedia : !md?.getUserMedia) {
+    syncSay(kind === "screen"
+      ? "This browser can't share the screen (iPhone browsers usually can't). Try Capture card / camera, or use Chrome on a PC."
+      : "This browser can't use the camera. Check that camera access is allowed for this app in Settings.");
+    return;
+  }
+  try {
+    syncStream = kind === "screen"
+      ? await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false })
+      : await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+          deviceId: $("camSelect").value ? { exact: $("camSelect").value } : undefined,
+          width: { ideal: 1280 }, height: { ideal: 720 } } });
+  } catch (e) {
+    syncStream = null;
+    syncSay(e.name === "NotAllowedError"
+      ? "Permission was denied. Allow screen or camera access and try again."
+      : `${e.name}: ${e.message}`);
+    return;
+  }
+  if (kind === "cam") await listCameras();
+  const v = $("syncVideo");
+  v.srcObject = syncStream;
+  v.hidden = false;
+  await v.play().catch(() => {});
+  syncStream.getVideoTracks()[0].addEventListener("ended", stopSync);   // e.g. "Stop sharing"
+  syncSmoothed = []; syncSent = [];
+  all(s => { s.set(A.POWER, T.BOOL, [1]); s.set(A.MODE, T.BYTE, [MODE_COLOR]); });
+  $(kind === "screen" ? "btnSyncScreen" : "btnSyncCam").classList.add("active");
+  $("btnSyncStop").hidden = false;
+  $("syncInfo").textContent = strips.some(s => s.state === "on")
+    ? "Syncing. Keep this page open; it can be in the background."
+    : "Syncing, but no strips are connected yet. Add them above.";
+  ticker.postMessage(SYNC_MS);
+}
+
+function stopSync() {
+  ticker.postMessage(0);
+  if (syncStream) syncStream.getTracks().forEach(t => t.stop());
+  syncStream = null;
+  $("syncVideo").hidden = true;
+  $("syncVideo").srcObject = null;
+  $("btnSyncStop").hidden = true;
+  $("syncInfo").textContent = "";
+  ["btnSyncScreen", "btnSyncCam"].forEach(id => $(id).classList.remove("active"));
+}
+
+/* ---------- wiring ---------- */
+SWATCHES.forEach(c => {
+  const b = document.createElement("button");
+  b.className = "swatch"; b.dataset.c = c; b.style.setProperty("--c", c);
+  b.setAttribute("aria-label", c);
+  b.onclick = () => pickColor(c);
+  $("swatches").appendChild(b);
+});
+
+$("picker").addEventListener("input", e => pickColor(e.target.value));
+
+$("bright").addEventListener("input", e => {
+  const v = +e.target.value;
+  $("brightVal").textContent = v + "%";
+  all(s => s.set(A.BRIGHT, T.BYTE, [v]));
+});
+
+$("btnOn").onclick = () => all(s => s.set(A.POWER, T.BOOL, [1]));
+$("btnOff").onclick = () => { stopEffect(); stopMusicUi(); all(s => s.set(A.POWER, T.BOOL, [0])); };
+
+Object.entries(ZONE_PRESETS).forEach(([name, p]) => {
+  const b = document.createElement("button");
+  const css = p.blend ? p.stops.join(",") : p.stops.flatMap((c, i, a) => [`${c} ${i / a.length * 100}%`, `${c} ${(i + 1) / a.length * 100}%`]).join(",");
+  b.innerHTML = `<span class="bar" style="background:linear-gradient(90deg,${css})"></span><span class="name">${name}</span>`;
+  b.onclick = () => sendZones(zoneColors(p.stops, p.blend));
+  $("presets").appendChild(b);
+});
+const customStops = () => ["z1", "z2", "z3"].map(id => $(id).value);
+$("btnBlend").onclick = () => sendZones(zoneColors(customStops(), true));
+$("btnBlocks").onclick = () => sendZones(zoneColors(customStops(), false));
+
+for (let i = 1; i <= 16; i++) $("musicEffect").add(new Option(`Effect ${i}`, i, i === 3, i === 3));
+$("btnMusic").onclick = sendMusic;
+
+$("btnSyncScreen").onclick = () => startSync("screen");
+$("btnSyncCam").onclick = () => startSync("cam");
+$("btnSyncStop").onclick = stopSync;
+$("camSelect").onchange = () => { if (syncStream && $("btnSyncCam").classList.contains("active")) startSync("cam"); };
+$("musicEffect").onchange = () => { if (musicOn) sendMusic(); };
+$("micSens").addEventListener("input", e => { $("micVal").textContent = e.target.value; });
+$("micSens").addEventListener("change", () => { if (musicOn) sendMusic(); });
+
+document.querySelectorAll("[data-effect]").forEach(b => b.onclick = () => startEffect(b.dataset.effect));
+
+async function addStrip(showAll) {
+  if (!navigator.bluetooth) {
+    say("This browser has no Web Bluetooth. On iPhone use Bluefy; on PC use Chrome or Edge.", true);
+    return;
+  }
+  say("Opening Bluetooth picker…");
+  try {
+    // The strips advertise their service byte-swapped (E0FF) but serve it as FFE0.
+    const opts = showAll
+      ? { acceptAllDevices: true, optionalServices: [SERVICE_UUID, AD_SERVICE_UUID] }
+      : { filters: [{ namePrefix: "Vont" }], optionalServices: [SERVICE_UUID, AD_SERVICE_UUID] };
+    const device = await navigator.bluetooth.requestDevice(opts);
+    say(`Connecting to ${device.name || "strip"}…`);
+    let s = strips.find(x => x.device.id === device.id);
+    if (!s) { s = new Strip(device); strips.push(s); }
+    await s.connect();
+    say(`${device.name || "Strip"} connected.`);
+  } catch (e) {
+    strips.filter(s => s.state === "connecting").forEach(s => s.setState("off"));
+    if (e.name === "NotFoundError" && /cancel/i.test(e.message)) say("");
+    else say(`${e.name}: ${e.message}. Make sure Bluetooth is on and nothing else is connected to the strips.`, true);
+  }
+}
+
+$("btnAdd").onclick = () => addStrip(false);
+$("btnAddAll").onclick = () => addStrip(true);
+
+showColor(current);
+render();
+if (!navigator.bluetooth) say("Open this page in Bluefy (iPhone) or Chrome/Edge (PC) to use Bluetooth.", true);
+</script>
+</body>
+</html>
