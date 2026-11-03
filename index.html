@@ -268,7 +268,30 @@ class Strip {
     this.pending = new Map();   // latest value per attribute; older ones are dropped
     this.busy = false;
     this.state = "connecting";
-    device.addEventListener("gattserverdisconnected", () => { this.char = null; this.setState("off"); });
+    this.retrying = false;
+    device.addEventListener("gattserverdisconnected", () => {
+      this.char = null;
+      this.setState("off");
+      setTimeout(() => this.reconnect(), 1500);   // strip dropped out: keep trying in the background
+    });
+  }
+
+  // Retry quietly with growing gaps; stops once connected. Safe to call repeatedly.
+  async reconnect(tries = 6) {
+    if (this.retrying || this.state === "on") return;
+    this.retrying = true;
+    try {
+      for (let i = 0; i < tries && this.state !== "on"; i++) {
+        try {
+          await Promise.race([this.connect(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000))]);
+        } catch {
+          this.setState("off");
+          await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+        }
+      }
+    } finally {
+      this.retrying = false;
+    }
   }
 
   setState(s) { this.state = s; render(); }
@@ -282,6 +305,7 @@ class Strip {
     await this.char.startNotifications();
     this.setState("on");
     this.write(frame(0x82, [], this.nextSerial()));  // ask for current state
+    if (syncStream) { this.set(A.POWER, T.BOOL, [1]); this.set(A.MODE, T.BYTE, [MODE_COLOR]); }
   }
 
   nextSerial() { const s = this.serial; this.serial = (this.serial - 1) || 0xffff; return s; }
@@ -365,7 +389,7 @@ function render() {
     if (s.state === "off") {
       const b = document.createElement("button");
       b.textContent = "Reconnect";
-      b.onclick = () => s.connect().catch(e => { s.setState("off"); say(e.message, true); });
+      b.onclick = () => s.reconnect(2);
       li.appendChild(b);
     }
     ul.appendChild(li);
@@ -523,7 +547,8 @@ const syncCtx = syncCanvas.getContext("2d", { willReadFrequently: true });
 const ticker = new Worker(URL.createObjectURL(new Blob(
   ["let t; onmessage = e => { clearInterval(t); if (e.data) t = setInterval(() => postMessage(0), e.data); };"],
   { type: "text/javascript" })));
-let syncStream = null, syncSmoothed = [], syncSent = [];
+let syncStream = null, syncKind = null, syncSmoothed = [], syncSent = [];
+let resumeKind = null;   // sync that was running when the app went to the background
 
 // Average color where colorful, bright pixels count more than gray or dark ones.
 function vividMean(d, x0, x1, y0, y1) {
@@ -613,6 +638,7 @@ async function startSync(kind) {
     return;
   }
   if (kind === "cam") await listCameras();
+  syncKind = kind;
   const v = $("syncVideo");
   v.srcObject = syncStream;
   v.hidden = false;
@@ -632,6 +658,7 @@ function stopSync() {
   ticker.postMessage(0);
   if (syncStream) syncStream.getTracks().forEach(t => t.stop());
   syncStream = null;
+  syncKind = null;
   $("syncVideo").hidden = true;
   $("syncVideo").srcObject = null;
   $("btnSyncStop").hidden = true;
@@ -710,8 +737,44 @@ async function addStrip(showAll) {
 $("btnAdd").onclick = () => addStrip(false);
 $("btnAddAll").onclick = () => addStrip(true);
 
+/* ---------- persistence: reconnect saved strips, resume after the app was in the background ---------- */
+async function autoConnect() {
+  if (!navigator.bluetooth?.getDevices) return;   // browser can't remember strips; use + Add strip
+  let saved;
+  try { saved = (await navigator.bluetooth.getDevices()).filter(d => (d.name || "").startsWith("Vont")); }
+  catch { return; }
+  if (!saved.length) return;
+  say(`Reconnecting to ${saved.length} saved strip${saved.length > 1 ? "s" : ""}…`);
+  await Promise.all(saved.map(d => {
+    let s = strips.find(x => x.device.id === d.id);
+    if (!s) { s = new Strip(d); strips.push(s); render(); }
+    return s.reconnect(3);
+  }));
+  const on = strips.filter(s => s.state === "on").length;
+  say(on ? `${on} strip${on > 1 ? "s" : ""} connected.` : "Saved strips are out of range or busy. Tap Reconnect, or + Add strip.", !on);
+}
+
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) {
+    resumeKind = syncKind;              // iOS stops the camera/screen when the app is left
+    return;
+  }
+  strips.filter(s => s.state === "off").forEach(s => s.reconnect(3));
+  const track = syncStream?.getVideoTracks()[0];
+  if (resumeKind && (!track || track.readyState === "ended" || track.muted)) {
+    const kind = resumeKind;
+    resumeKind = null;
+    if (kind === "cam") await startSync("cam");
+    else { stopSync(); syncSay("Screen sharing stopped while you were away. Tap Screen to start it again."); }
+  } else {
+    resumeKind = null;
+    $("syncVideo").play?.().catch(() => {});
+  }
+});
+
 showColor(current);
 render();
+autoConnect();
 if (!navigator.bluetooth) say("Open this page in Bluefy (iPhone) or Chrome/Edge (PC) to use Bluetooth.", true);
 </script>
 </body>
